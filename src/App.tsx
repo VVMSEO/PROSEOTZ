@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2, Settings, X } from 'lucide-react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
@@ -60,6 +62,8 @@ export default function App() {
   const [exampleUrls, setExampleUrls] = useState('');
   const [businessGoal, setBusinessGoal] = useState('');
   const [additionalDetails, setAdditionalDetails] = useState('');
+  const [cmsFramework, setCmsFramework] = useState('');
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedTask, setGeneratedTask] = useState('');
@@ -116,6 +120,7 @@ export default function App() {
         setExampleUrls(data.exampleUrls || '');
         setBusinessGoal(data.businessGoal || '');
         setAdditionalDetails(data.additionalDetails || '');
+        setCmsFramework(data.cmsFramework || '');
       }
       isInitialLoad.current = false;
     }, (error) => {
@@ -139,6 +144,7 @@ export default function App() {
         exampleUrls,
         businessGoal,
         additionalDetails,
+        cmsFramework,
       };
       setDoc(doc(db, path), data, { merge: true }).catch(err => {
         handleFirestoreError(err, OperationType.WRITE, path);
@@ -146,7 +152,7 @@ export default function App() {
     }, 1000);
 
     return () => clearTimeout(t);
-  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails, userId]);
+  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails, cmsFramework, userId]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -180,31 +186,49 @@ export default function App() {
     const problemTypeName = PROBLEM_TYPES.find(p => p.id === selectedProblemType)?.name || '';
 
     const prompt = `
-Ты — профессиональный SEO-специалист. Создай подробное техническое задание (ТЗ) в формате Markdown на основе следующих данных:
+Ты — Senior Technical SEO и системный аналитик. Твоя цель — написать идеальное техническое задание (ТЗ) для разработчика. ТЗ должно быть максимально коротким, точным, без "воды", маркетинговых отступлений и общих фраз. Только сухая выжимка и конкретные инструкции. Формат — Markdown.
 
-- Название сайта: ${siteName.trim()}
-- Суть задачи: ${taskSummary.trim()}
+Учти следующие вводные:
+- Сайт: ${siteName.trim()}
+- CMS/Фреймворк: ${cmsFramework.trim() || 'Кастомная сборка'}
+- Задача (кратко): ${taskSummary.trim()}
 - Тип проблемы: ${problemTypeName}
-- Подробное описание проблемы: ${problemDescription.trim()}
-- Примеры URL:
+- Описание проблемы: ${problemDescription.trim()}
+- URL-адреса для проверки:
 ${exampleUrls.trim() || 'Не указаны'}
 - Бизнес-цель: ${businessGoal.trim() || 'Не указана'}
 - Дополнительные детали: ${additionalDetails.trim() || 'Нет'}
 
-ТЗ должно иметь четкую и профессиональную структуру. Обязательно включи следующие разделы:
+Структура ТЗ жестко регламентирована:
 
-1.  **Заголовок:** [Название сайта] - ТЗ на [Суть задачи]
-2.  **Что не так на сайте?** (Подробно опиши проблему, объясни, как она связана с выбранным типом SEO-проблемы — "${problemTypeName}" — и почему это плохо для SEO.)
-3.  **Примеры URL:** (Перечисли предоставленные URL, если они есть.)
-4.  **Для чего нужны изменения?** (Сформулируй бизнес-цель и конкретную SEO-цель, которую нужно достичь.)
-5.  **Что необходимо сделать с точки зрения SEO?** (Предоставь пошаговый, детализированный план решения проблемы. План должен быть конкретным, техническим и релевантным для типа проблемы "${problemTypeName}".)
-6.  **Дополнительные требования:** (Включи стандартные требования, такие как тестирование на dev-среде, бэкапы и мониторинг после внедрения. Также включи предоставленные пользователем дополнительные детали.)
-7.  **Критерии приемки:** (Перечисли конкретные, измеримые критерии, по которым можно будет судить, что задача выполнена успешно.)
-8.  **Ожидаемый результат:** (Опиши позитивные изменения в SEO-показателях после выполнения ТЗ.)
-9.  **Срок реализации:** (Укажи примерный срок, например "5-7 рабочих дней".)
-10. **Приоритет:** (Укажи приоритет, например "Высокий".)
+# ТЗ: ${taskSummary.trim()}
 
-Сделай ТЗ профессиональным, структурированным и понятным для разработчика. Используй Markdown для форматирования.
+**Контекст задачи**
+[Кратко в 1-2 предложениях: в чем проблема и почему это ломает SEO.]
+
+**Стек / Платформа**
+${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
+
+---
+
+## 🛑 Текущее поведение (Bug / Issue)
+- [Опиши, как система работает сейчас (на основе описания: "${problemDescription.trim()}"), что именно отдается в коде или заголовках, что видит поисковый бот. Без эмоций.]
+
+## ✅ Ожидаемое поведение (Expected Result)
+- [Опиши, как система должна работать после правок. Какой должен быть статус-код, тег, JSON-LD, редирект и т.д.]
+
+---
+
+## 🛠 Actionable Steps (Пошаговый план внедрения)
+[Предоставь детализированный технический алгоритм работы для программиста. Пиши на языке разработчика (бэкенд/фронтенд).]
+1. [Конкретный шаг, например: В контроллере X изменить логику отдачи заголовка Y]
+2. ...
+
+## 🧪 Критерии приемки (DoD)
+- [ ] Однозначные чек-листы для QA/тестирования (например: "URL X отдает статус 200", "В исходном коде присутствует тег Y").
+
+*Срок реализации:* [Укажи разумный срок в часах]
+*Приоритет:* [Укажи приоритет на основе задачи]
 `;
 
     try {
@@ -327,6 +351,18 @@ ${exampleUrls.trim() || 'Не указаны'}
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <label htmlFor="cmsFramework" className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider">CMS / Фреймворк</label>
+            <input
+              type="text"
+              id="cmsFramework"
+              value={cmsFramework}
+              onChange={(e) => setCmsFramework(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors"
+              placeholder="Кастомная, 1С-Битрикс, Next.js и т.д."
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider">Тип SEO проблемы</label>
             <div className="grid grid-cols-1 gap-2">
               {PROBLEM_TYPES.map((type) => (
@@ -404,10 +440,22 @@ ${exampleUrls.trim() || 'Не указаны'}
         <section className="bg-[#fdfdfd] p-6 sm:p-10 overflow-y-auto flex flex-col items-center">
           <div className="w-full max-w-[700px] bg-white border border-slate-200 rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.03)] p-8 sm:p-12 flex flex-col min-h-full">
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-blue-600" />
-                Сгенерированное ТЗ
-              </h2>
+              <div className="flex gap-4 items-center">
+                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <ClipboardList className="w-5 h-5 text-blue-600" />
+                  ТЗ
+                </h2>
+                <div className="flex bg-slate-100 p-1 rounded-md text-xs font-medium">
+                  <button
+                     onClick={() => setIsPreviewMode(false)}
+                     className={`px-3 py-1 rounded transition-colors ${!isPreviewMode ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  >Markdown</button>
+                  <button
+                     onClick={() => setIsPreviewMode(true)}
+                     className={`px-3 py-1 rounded transition-colors ${isPreviewMode ? 'bg-white shadow text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  >Preview</button>
+                </div>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleCopy}
@@ -425,12 +473,20 @@ ${exampleUrls.trim() || 'Не указаны'}
                 </button>
               </div>
             </div>
-            <textarea
-              value={generatedTask}
-              readOnly
-              className="w-full flex-1 focus:outline-none text-[#334155] font-mono text-sm leading-[1.6] resize-none bg-transparent min-h-[500px]"
-              placeholder="Здесь появится сгенерированное AI техническое задание..."
-            />
+            {isPreviewMode ? (
+              <div className="w-full flex-1 overflow-y-auto prose prose-slate prose-sm max-w-none prose-headings:text-slate-800 prose-a:text-blue-600 prose-pre:bg-slate-50 prose-pre:text-slate-800 prose-pre:border prose-pre:border-slate-200 prose-ul:my-2 prose-li:my-0.5">
+                <Markdown remarkPlugins={[remarkGfm]}>
+                  {generatedTask || '*Здесь появится сгенерированное AI техническое задание...*'}
+                </Markdown>
+              </div>
+            ) : (
+              <textarea
+                value={generatedTask}
+                readOnly
+                className="w-full flex-1 focus:outline-none text-[#334155] font-mono text-sm leading-[1.6] resize-none bg-transparent min-h-[500px]"
+                placeholder="Здесь появится сгенерированное AI техническое задание..."
+              />
+            )}
           </div>
         </section>
       </main>
