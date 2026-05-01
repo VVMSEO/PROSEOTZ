@@ -188,6 +188,8 @@ export default function App() {
     const prompt = `
 Ты — Senior Technical SEO и системный аналитик. Твоя цель — написать идеальное техническое задание (ТЗ) для разработчика. ТЗ должно быть максимально коротким, точным, без "воды", маркетинговых отступлений и общих фраз. Только сухая выжимка и конкретные инструкции. Формат — Markdown.
 
+ВАЖНОЕ ПРАВИЛО ФОРМАТИРОВАНИЯ: НЕ используй символ обратной кавычки (backtick, \`) для выделения доменов, URL-адресов или названий сайтов. Пиши их обычным текстом, чтобы разработчикам было их удобно копировать двойным кликом.
+
 Учти следующие вводные:
 - Сайт: ${siteName.trim()}
 - CMS/Фреймворк: ${cmsFramework.trim() || 'Кастомная сборка'}
@@ -211,15 +213,15 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
 
 ---
 
-## 🛑 Текущее поведение (Bug / Issue)
+## 🛑 Что не так на сайте?
 - [Опиши, как система работает сейчас (на основе описания: "${problemDescription.trim()}"), что именно отдается в коде или заголовках, что видит поисковый бот. Без эмоций.]
 
-## ✅ Ожидаемое поведение (Expected Result)
+## ✅ Что нужно сделать
 - [Опиши, как система должна работать после правок. Какой должен быть статус-код, тег, JSON-LD, редирект и т.д.]
 
 ---
 
-## 🛠 Actionable Steps (Пошаговый план внедрения)
+## 🛠 Пошаговый план внедрения
 [Предоставь детализированный технический алгоритм работы для программиста. Пиши на языке разработчика (бэкенд/фронтенд).]
 1. [Конкретный шаг, например: В контроллере X изменить логику отдачи заголовка Y]
 2. ...
@@ -388,7 +390,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
               id="problemDescription"
               value={problemDescription}
               onChange={(e) => setProblemDescription(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-none min-h-[80px]"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-y min-h-[80px]"
               placeholder="Опишите проблему подробно..."
             />
           </div>
@@ -399,7 +401,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
               id="exampleUrls"
               value={exampleUrls}
               onChange={(e) => setExampleUrls(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-none min-h-[80px]"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-y min-h-[80px]"
               placeholder="https://example.com/page1&#10;https://example.com/page2"
             />
           </div>
@@ -410,7 +412,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
               id="businessGoal"
               value={businessGoal}
               onChange={(e) => setBusinessGoal(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-none min-h-[80px]"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-y min-h-[80px]"
               placeholder="Какую бизнес-цель решает эта задача?"
             />
           </div>
@@ -421,7 +423,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
               id="additionalDetails"
               value={additionalDetails}
               onChange={(e) => setAdditionalDetails(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-none min-h-[80px]"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm text-slate-800 bg-[#fafafa] focus:outline-none focus:border-blue-600 focus:bg-white transition-colors resize-y min-h-[80px]"
               placeholder="Любые дополнительные детали или контекст..."
             />
           </div>
@@ -483,7 +485,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
               <textarea
                 value={generatedTask}
                 readOnly
-                className="w-full flex-1 focus:outline-none text-[#334155] font-mono text-sm leading-[1.6] resize-none bg-transparent min-h-[500px]"
+                className="w-full flex-1 focus:outline-none text-[#334155] font-mono text-sm leading-[1.6] resize-y bg-transparent min-h-[500px]"
                 placeholder="Здесь появится сгенерированное AI техническое задание..."
               />
             )}
