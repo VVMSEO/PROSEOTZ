@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2 } from 'lucide-react';
+import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2, Settings, X } from 'lucide-react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { db, auth, googleProvider } from './firebase';
@@ -66,6 +66,9 @@ export default function App() {
   
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('router_api_key') || '');
+
   const isInitialLoad = useRef(true);
 
   const handleLogin = async () => {
@@ -150,7 +153,18 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Save API key to LocalStorage
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('router_api_key', key);
+  };
+
   const handleGenerate = async () => {
+    if (!apiKey) {
+      showToast('Пожалуйста, укажите API ключ в настройках', 'error');
+      setIsSettingsOpen(true);
+      return;
+    }
     if (!siteName.trim() || !taskSummary.trim() || !problemDescription.trim()) {
       showToast('Пожалуйста, заполните поля: Название сайта, Суть и Описание проблемы.', 'error');
       return;
@@ -194,12 +208,18 @@ ${exampleUrls.trim() || 'Не указаны'}
 `;
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
         headers: {
+          "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ prompt })
+        body: JSON.stringify({
+          model: "anthropic/claude-sonnet-4.6",
+          messages: [
+            { role: "user", content: prompt }
+          ]
+        })
       });
 
       if (!response.ok) {
@@ -260,6 +280,13 @@ ${exampleUrls.trim() || 'Не указаны'}
           Pro SEO ТЗ Генератор
         </div>
         <div className="flex gap-3 items-center">
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors"
+            title="Настройки API"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
           <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wide">Drafting Mode</span>
           {userId ? (
             <button onClick={handleLogout} className="text-sm font-medium hover:text-blue-600 transition-colors">Выйти</button>
@@ -418,6 +445,47 @@ ${exampleUrls.trim() || 'Не указаны'}
           }`}
         >
           {toast.message}
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800">Настройки API</h3>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="apiKey" className="text-xs font-semibold uppercase tracking-wider text-slate-500">RouterAI API Ключ</label>
+                <input
+                  type="password"
+                  id="apiKey"
+                  value={apiKey}
+                  onChange={(e) => saveApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm text-slate-800 focus:outline-none focus:border-blue-600 transition-colors"
+                />
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Мы сохраняем ваш ключ локально в браузере. Ключ не отправляется на наши серверы и используется только для запросов к API RouterAI.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold text-sm transition-colors"
+              >
+                Сохранить и Закрыть
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
