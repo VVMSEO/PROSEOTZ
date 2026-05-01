@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "FormData": {
+      "title": "Form Data",
+      "description": "User's saved form data draft",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "taskSummary": { "type": "string" },
+        "selectedProblemType": { "type": "string", "format": "nullable" },
+        "problemDescription": { "type": "string" },
+        "exampleUrls": { "type": "string" },
+        "businessGoal": { "type": "string" },
+        "additionalDetails": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/formData/{formId}": {
+      "schema": { "$ref": "#/entities/FormData" },
+      "description": "The user's drafts"
+    }
+  }
+}

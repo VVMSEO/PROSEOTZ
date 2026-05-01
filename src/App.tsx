@@ -1,5 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2 } from 'lucide-react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import { db, auth, googleProvider } from './firebase';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+}
 
 const PROBLEM_TYPES = [
   { id: 'duplicate', name: 'Дублирование контента', desc: 'Размытие ссылочного веса' },
@@ -11,6 +50,8 @@ const PROBLEM_TYPES = [
 ];
 
 export default function App() {
+  const [userId, setUserId] = useState<string | null>(null);
+  
   // State
   const [siteName, setSiteName] = useState('');
   const [taskSummary, setTaskSummary] = useState('');
@@ -24,13 +65,47 @@ export default function App() {
   const [generatedTask, setGeneratedTask] = useState('');
   
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  
+  const isInitialLoad = useRef(true);
 
-  // Load from LocalStorage on mount
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e: any) {
+      console.error("Login failed", e);
+      showToast("Ошибка при входе", "error");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e: any) {
+      console.error("Logout failed", e);
+    }
+  };
+
+  // Auth state
   useEffect(() => {
-    const saved = localStorage.getItem('seo-tz-form');
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load from Firestore
+  useEffect(() => {
+    if (!userId) return;
+    
+    const path = `users/${userId}/formData/main`;
+    const docRef = doc(db, path);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
         setSiteName(data.siteName || '');
         setTaskSummary(data.taskSummary || '');
         setSelectedProblemType(data.selectedProblemType || null);
@@ -38,25 +113,37 @@ export default function App() {
         setExampleUrls(data.exampleUrls || '');
         setBusinessGoal(data.businessGoal || '');
         setAdditionalDetails(data.additionalDetails || '');
-      } catch (e) {
-        console.error('Failed to parse local storage', e);
       }
-    }
-  }, []);
+      isInitialLoad.current = false;
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, path);
+    });
+    
+    return () => unsubscribe();
+  }, [userId]);
 
-  // Save to LocalStorage on change
+  // Save to Firestore on change
   useEffect(() => {
-    const data = {
-      siteName,
-      taskSummary,
-      selectedProblemType,
-      problemDescription,
-      exampleUrls,
-      businessGoal,
-      additionalDetails,
-    };
-    localStorage.setItem('seo-tz-form', JSON.stringify(data));
-  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails]);
+    if (!userId || isInitialLoad.current) return;
+
+    const t = setTimeout(() => {
+      const path = `users/${userId}/formData/main`;
+      const data = {
+        siteName,
+        taskSummary,
+        selectedProblemType: selectedProblemType || '',
+        problemDescription,
+        exampleUrls,
+        businessGoal,
+        additionalDetails,
+      };
+      setDoc(doc(db, path), data, { merge: true }).catch(err => {
+        handleFirestoreError(err, OperationType.WRITE, path);
+      });
+    }, 1000);
+
+    return () => clearTimeout(t);
+  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails, userId]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -174,7 +261,14 @@ ${exampleUrls.trim() || 'Не указаны'}
         </div>
         <div className="flex gap-3 items-center">
           <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-semibold uppercase tracking-wide">Drafting Mode</span>
-          <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-300"></div>
+          {userId ? (
+            <button onClick={handleLogout} className="text-sm font-medium hover:text-blue-600 transition-colors">Выйти</button>
+          ) : (
+            <button onClick={handleLogin} className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">Войти через Google</button>
+          )}
+          <div className="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-300 overflow-hidden flex items-center justify-center text-xs font-bold text-slate-500">
+            {userId ? auth.currentUser?.email?.[0].toUpperCase() : '?'}
+          </div>
         </div>
       </header>
 

@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    // Primitive Definition
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+
+    function isValidFormDataObj(data) {
+      return data.keys().size() <= 7 &&
+             (data.keys().hasAll(['siteName']) ? (data.siteName is string && data.siteName.size() <= 1000) : true) &&
+             (data.keys().hasAll(['taskSummary']) ? (data.taskSummary is string && data.taskSummary.size() <= 1000) : true) &&
+             (data.keys().hasAll(['selectedProblemType']) ? (data.selectedProblemType is string && data.selectedProblemType.size() <= 100) : true) &&
+             (data.keys().hasAll(['problemDescription']) ? (data.problemDescription is string && data.problemDescription.size() <= 5000) : true) &&
+             (data.keys().hasAll(['exampleUrls']) ? (data.exampleUrls is string && data.exampleUrls.size() <= 2000) : true) &&
+             (data.keys().hasAll(['businessGoal']) ? (data.businessGoal is string && data.businessGoal.size() <= 2000) : true) &&
+             (data.keys().hasAll(['additionalDetails']) ? (data.additionalDetails is string && data.additionalDetails.size() <= 2000) : true);
+    }
+
+    match /users/{userId}/formData/{formId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && isValidId(formId);
+      allow list: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      
+      allow create: if isSignedIn() && 
+                       request.auth.uid == userId && 
+                       isValidId(userId) && isValidId(formId) && 
+                       isValidFormDataObj(incoming());
+                       
+      allow update: if isSignedIn() && 
+                       request.auth.uid == userId && 
+                       isValidId(userId) && isValidId(formId) && 
+                       isValidFormDataObj(incoming()) &&
+                       (
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'siteName', 'taskSummary', 'selectedProblemType', 'problemDescription', 
+                           'exampleUrls', 'businessGoal', 'additionalDetails'
+                         ])
+                       );
+                       
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId) && isValidId(formId);
+    }
+  }
+}
