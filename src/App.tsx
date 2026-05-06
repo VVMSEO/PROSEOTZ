@@ -71,7 +71,7 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('router_api_key') || '');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('router_api_key') || 'sk-idWLIk8WBHJJiwn-Y2oyMNdW0ckjsfIa');
 
   const isInitialLoad = useRef(true);
 
@@ -237,7 +237,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
       const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
+          "Authorization": apiKey,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
