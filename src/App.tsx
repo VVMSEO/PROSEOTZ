@@ -418,6 +418,7 @@ ${exampleUrls.trim() || 'Не указаны'}
 5. Если поле ввода пустое или критически неполно для какой-то секции — заполняй секцию настолько, насколько позволяют остальные поля, а недостающее выноси в финальный блок вопросов (см. ниже).
 6. В конце добавляй блок \`## ⚠️ Вопросы к SEO-специалисту перед стартом\` — пронумерованный список конкретных вопросов, без которых разработчику нельзя начинать. Если вопросов нет — пропусти блок.
 7. Объём ТЗ — столько, сколько нужно для однозначной реализации. Не растягивай и не сокращай в ущерб однозначности.
+8. ЗАПРЕЩЕНО оборачивать URL-адреса и домены в обратные кавычки (backticks, \`) или апострофы. Пиши их обычным текстом, чтобы разработчикам было их удобно копировать двойным кликом.
 
 # ФОРМАТ ВЫВОДА
 
@@ -436,7 +437,8 @@ ${exampleUrls.trim() || 'Не указаны'}
           model: "anthropic/claude-sonnet-4.6",
           messages: [
             { role: "user", content: prompt }
-          ]
+          ],
+          stream: true
         })
       });
 
@@ -445,15 +447,42 @@ ${exampleUrls.trim() || 'Не указаны'}
         throw new Error(`API Error (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json();
-      const text = data.choices?.[0]?.message?.content;
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder("utf-8");
       
-      if (text) {
-        setGeneratedTask(text);
-        showToast('ТЗ успешно сгенерировано!', 'success');
-      } else {
-        throw new Error('Empty response from AI');
+      if (!reader) {
+        throw new Error('Failed to get the stream reader');
       }
+
+      let currentText = "";
+      setGeneratedTask(""); // Clear the loading message immediately
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+            const dataStr = line.slice(6);
+            if (!dataStr.trim()) continue;
+            try {
+              const parsed = JSON.parse(dataStr);
+              const content = parsed.choices?.[0]?.delta?.content || "";
+              if (content) {
+                currentText += content;
+                setGeneratedTask(currentText);
+              }
+            } catch (e) {
+              // Ignore parse errors from partial chunks if any
+            }
+          }
+        }
+      }
+      
+      showToast('ТЗ успешно сгенерировано!', 'success');
     } catch (error: any) {
       console.error('Generation error:', error);
       setGeneratedTask(`Произошла ошибка при генерации ТЗ: ${error.message}\n\nПожалуйста, попробуйте еще раз.`);
