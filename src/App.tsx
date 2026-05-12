@@ -84,7 +84,19 @@ export default function App() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('router_api_key') || 'sk-idWLIk8WBHJJiwn-Y2oyMNdW0ckjsfIa');
+  const NEW_API_KEY = 'sk-idWLIk8WBHJJiwn-Y2oyMNdW0ckjsfIa';
+  const [apiKey, setApiKey] = useState(() => {
+    // If we want to guarantee the user's new key works immediately without them clearing localStorage
+    // we can just force it as default and overwrite it locally for now.
+    const saved = localStorage.getItem('router_api_key');
+    if (saved && saved !== NEW_API_KEY) {
+      // In a real app we might not overwrite a user key, but since they provided a new one here explicitly
+      // to fix the 401 error, we apply it.
+      localStorage.setItem('router_api_key', NEW_API_KEY);
+      return NEW_API_KEY;
+    }
+    return saved || NEW_API_KEY;
+  });
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -417,7 +429,7 @@ ${exampleUrls.trim() || 'Не указаны'}
       const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": apiKey.trim().startsWith('Bearer') ? apiKey.trim() : (apiKey.trim().startsWith('sk-') ? apiKey.trim() : `Bearer ${apiKey.trim()}`),
+          "Authorization": apiKey.trim().startsWith('Bearer') ? apiKey.trim() : `Bearer ${apiKey.trim()}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
