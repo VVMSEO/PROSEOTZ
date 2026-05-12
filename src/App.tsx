@@ -418,7 +418,7 @@ ${exampleUrls.trim() || 'Не указаны'}
 5. Если поле ввода пустое или критически неполно для какой-то секции — заполняй секцию настолько, насколько позволяют остальные поля, а недостающее выноси в финальный блок вопросов (см. ниже).
 6. В конце добавляй блок \`## ⚠️ Вопросы к SEO-специалисту перед стартом\` — пронумерованный список конкретных вопросов, без которых разработчику нельзя начинать. Если вопросов нет — пропусти блок.
 7. Объём ТЗ — столько, сколько нужно для однозначной реализации. Не растягивай и не сокращай в ущерб однозначности.
-8. ЗАПРЕЩЕНО оборачивать URL-адреса и домены в обратные кавычки (backticks, \`) или апострофы. Пиши их обычным текстом, чтобы разработчикам было их удобно копировать двойным кликом.
+8. СТРОГО ЗАПРЕЩЕНО использовать любые кавычки (одинарные, двойные, обратные \` или ') при оформлении URL-адресов, доменов, путей, расширений (.htm, .txt) и протоколов (http/https/www). Выводи их только как обычный голый текст без какого-либо обрамления!
 
 # ФОРМАТ ВЫВОДА
 
@@ -427,14 +427,17 @@ ${exampleUrls.trim() || 'Не указаны'}
 \`# ТЗ: ${taskSummary.trim()}\``;
 
     const cleanMarkdownUrls = (text: string) => {
-      return text.replace(/`([^`]+)`/g, (match, content) => {
-        const isUrl = /^https?:\/\//i.test(content) || /^www\./i.test(content);
-        const isPath = /^\/[a-zA-Z0-9\-_./*]+/i.test(content) || ['/', '/*'].includes(content);
-        const isDomainOrFile = /^[a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,10}(\/.*)?$/i.test(content);
-        const isExtension = /^\.[a-zA-Z0-9]+$/i.test(content);
-        const isProtocol = ['http://', 'https://', 'www'].includes(content.toLowerCase());
-        
-        if ((isUrl || isPath || isDomainOrFile || isExtension || isProtocol) && !content.includes('<') && !content.includes('>')) {
+      // Very aggressive strip of backticks and single quotes for anything that looks like a URL, domain, path, protocol, or extension
+      return text.replace(/[`']([^`'\n]+)[`']/g, (match, content) => {
+        const lower = content.toLowerCase();
+        const isWebThing = 
+          lower.includes('http') || 
+          lower.includes('www') || 
+          /^[a-z0-9-]+\.[a-z]{2,10}/i.test(lower) || 
+          lower.startsWith('/') || 
+          /^\.[a-z0-9]+$/i.test(lower); // matches .htm, .txt
+          
+        if (isWebThing && !content.includes('<') && !content.includes('>')) {
           return content;
         }
         return match;
