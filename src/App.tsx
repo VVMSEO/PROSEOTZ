@@ -426,7 +426,22 @@ ${exampleUrls.trim() || 'Не указаны'}
 
 \`# ТЗ: ${taskSummary.trim()}\``;
 
-    try {
+    const cleanMarkdownUrls = (text: string) => {
+      return text.replace(/`([^`]+)`/g, (match, content) => {
+        const isUrl = /^https?:\/\//i.test(content) || /^www\./i.test(content);
+        const isPath = /^\/[a-zA-Z0-9\-_./*]+/i.test(content) || ['/', '/*'].includes(content);
+        const isDomainOrFile = /^[a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,10}(\/.*)?$/i.test(content);
+        const isExtension = /^\.[a-zA-Z0-9]+$/i.test(content);
+        const isProtocol = ['http://', 'https://', 'www'].includes(content.toLowerCase());
+        
+        if ((isUrl || isPath || isDomainOrFile || isExtension || isProtocol) && !content.includes('<') && !content.includes('>')) {
+          return content;
+        }
+        return match;
+      });
+    };
+
+    const doRequest = async (useStream: boolean) => {
       const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -438,13 +453,25 @@ ${exampleUrls.trim() || 'Не указаны'}
           messages: [
             { role: "user", content: prompt }
           ],
-          stream: true
+          stream: useStream
         })
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API Error (${response.status}): ${errorText}`);
+      }
+
+      if (!useStream) {
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (text) {
+          setGeneratedTask(cleanMarkdownUrls(text));
+          showToast('ТЗ успешно сгенерировано (без стриминга)!', 'success');
+        } else {
+          throw new Error('Empty response from AI');
+        }
+        return;
       }
 
       const reader = response.body?.getReader();
@@ -456,21 +483,6 @@ ${exampleUrls.trim() || 'Не указаны'}
 
       let currentText = "";
       setGeneratedTask(""); // Clear the loading message immediately
-      
-      const cleanMarkdownUrls = (text: string) => {
-        return text.replace(/`([^`]+)`/g, (match, content) => {
-          const isUrl = /^https?:\/\//i.test(content) || /^www\./i.test(content);
-          const isPath = /^\/[a-zA-Z0-9\-_./*]+/i.test(content) || ['/', '/*'].includes(content);
-          const isDomainOrFile = /^[a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,10}(\/.*)?$/i.test(content);
-          const isExtension = /^\.[a-zA-Z0-9]+$/i.test(content);
-          const isProtocol = ['http://', 'https://', 'www'].includes(content.toLowerCase());
-          
-          if ((isUrl || isPath || isDomainOrFile || isExtension || isProtocol) && !content.includes('<') && !content.includes('>')) {
-            return content;
-          }
-          return match;
-        });
-      };
       
       while (true) {
         const { done, value } = await reader.read();
@@ -498,10 +510,20 @@ ${exampleUrls.trim() || 'Не указаны'}
       }
       
       showToast('ТЗ успешно сгенерировано!', 'success');
+    };
+
+    try {
+      await doRequest(true);
     } catch (error: any) {
-      console.error('Generation error:', error);
-      setGeneratedTask(`Произошла ошибка при генерации ТЗ: ${error.message}\n\nПожалуйста, попробуйте еще раз.`);
-      showToast('Ошибка генерации ТЗ', 'error');
+      console.warn('Streaming failed, trying without stream...', error);
+      try {
+        setGeneratedTask('Ошибка при стриминге, пробуем обычный запрос...');
+        await doRequest(false);
+      } catch (err: any) {
+        console.error('Generation error:', err);
+        setGeneratedTask(`Произошла ошибка при генерации ТЗ: ${err.message}\n\nПожалуйста, попробуйте еще раз.`);
+        showToast('Ошибка генерации ТЗ', 'error');
+      }
     } finally {
       setIsGenerating(false);
     }
