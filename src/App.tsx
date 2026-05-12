@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2, Settings, X } from 'lucide-react';
+import { Target, ClipboardList, Search, Wrench, Rocket, Copy, Download, Loader2, Settings, X, Bookmark, Trash2, Plus } from 'lucide-react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -42,6 +42,19 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
+interface Template {
+  id: string;
+  name: string;
+  siteName: string;
+  taskSummary: string;
+  selectedProblemType: string | null;
+  problemDescription: string;
+  exampleUrls: string;
+  businessGoal: string;
+  additionalDetails: string;
+  cmsFramework: string;
+}
+
 const PROBLEM_TYPES = [
   { id: 'duplicate', name: 'Дублирование контента', desc: 'Размытие ссылочного веса' },
   { id: 'crawl', name: 'Краулинговый бюджет', desc: 'Неэффективное сканирование' },
@@ -73,7 +86,38 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('router_api_key') || 'sk-idWLIk8WBHJJiwn-Y2oyMNdW0ckjsfIa');
 
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  
   const isInitialLoad = useRef(true);
+  
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const lastSavedData = useRef<string>('');
+
+  const formDataRef = useRef({
+    siteName,
+    taskSummary,
+    selectedProblemType: selectedProblemType || '',
+    problemDescription,
+    exampleUrls,
+    businessGoal,
+    additionalDetails,
+    cmsFramework,
+  });
+
+  useEffect(() => {
+    formDataRef.current = {
+      siteName,
+      taskSummary,
+      selectedProblemType: selectedProblemType || '',
+      problemDescription,
+      exampleUrls,
+      businessGoal,
+      additionalDetails,
+      cmsFramework,
+    };
+  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails, cmsFramework]);
 
   const handleLogin = async () => {
     try {
@@ -104,6 +148,26 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Load Templates
+  useEffect(() => {
+    if (!userId) {
+      setTemplates([]);
+      return;
+    }
+    
+    const path = `users/${userId}/templates/data`;
+    const docRef = doc(db, path);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setTemplates(docSnap.data().list || []);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, path);
+    });
+    
+    return () => unsubscribe();
+  }, [userId]);
+
   // Load from Firestore
   useEffect(() => {
     if (!userId) return;
@@ -130,29 +194,28 @@ export default function App() {
     return () => unsubscribe();
   }, [userId]);
 
-  // Save to Firestore on change
+  // Auto-save at regular intervals (30s)
   useEffect(() => {
-    if (!userId || isInitialLoad.current) return;
+    if (!userId) return;
 
-    const t = setTimeout(() => {
+    const interval = setInterval(() => {
+      if (isInitialLoad.current) return;
+      
+      const data = formDataRef.current;
+      const dataStr = JSON.stringify(data);
+      if (dataStr === lastSavedData.current) return; // Skip if no changes
+
       const path = `users/${userId}/formData/main`;
-      const data = {
-        siteName,
-        taskSummary,
-        selectedProblemType: selectedProblemType || '',
-        problemDescription,
-        exampleUrls,
-        businessGoal,
-        additionalDetails,
-        cmsFramework,
-      };
-      setDoc(doc(db, path), data, { merge: true }).catch(err => {
+      setDoc(doc(db, path), data, { merge: true }).then(() => {
+        setLastSaved(new Date());
+        lastSavedData.current = dataStr;
+      }).catch(err => {
         handleFirestoreError(err, OperationType.WRITE, path);
       });
-    }, 1000);
+    }, 30000);
 
-    return () => clearTimeout(t);
-  }, [siteName, taskSummary, selectedProblemType, problemDescription, exampleUrls, businessGoal, additionalDetails, cmsFramework, userId]);
+    return () => clearInterval(interval);
+  }, [userId]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     setToast({ message, type });
@@ -163,6 +226,64 @@ export default function App() {
   const saveApiKey = (key: string) => {
     setApiKey(key);
     localStorage.setItem('router_api_key', key);
+  };
+
+  const handleSaveTemplate = () => {
+    if (!userId) {
+      showToast('Пожалуйста, войдите, чтобы сохранять шаблоны', 'info');
+      return;
+    }
+    if (!newTemplateName.trim()) {
+      showToast('Пожалуйста, введите имя шаблона', 'error');
+      return;
+    }
+    const newTemplate: Template = {
+      id: crypto.randomUUID(),
+      name: newTemplateName.trim(),
+      siteName,
+      taskSummary,
+      selectedProblemType,
+      problemDescription,
+      exampleUrls,
+      businessGoal,
+      additionalDetails,
+      cmsFramework,
+    };
+    
+    const updatedList = [...templates, newTemplate];
+    const path = `users/${userId}/templates/data`;
+    setDoc(doc(db, path), { list: updatedList }, { merge: true }).then(() => {
+      setNewTemplateName('');
+      showToast('Шаблон сохранен!', 'success');
+    }).catch(err => {
+      handleFirestoreError(err, OperationType.WRITE, path);
+      showToast('Ошибка при сохранении', 'error');
+    });
+  };
+
+  const handleLoadTemplate = (t: Template) => {
+    setSiteName(t.siteName);
+    setTaskSummary(t.taskSummary);
+    setSelectedProblemType(t.selectedProblemType);
+    setProblemDescription(t.problemDescription);
+    setExampleUrls(t.exampleUrls);
+    setBusinessGoal(t.businessGoal);
+    setAdditionalDetails(t.additionalDetails);
+    setCmsFramework(t.cmsFramework);
+    setIsTemplatesOpen(false);
+    showToast(`Шаблон "${t.name}" загружен`, 'success');
+  };
+
+  const handleDeleteTemplate = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!userId) return;
+    const updatedList = templates.filter(t => t.id !== id);
+    const path = `users/${userId}/templates/data`;
+    setDoc(doc(db, path), { list: updatedList }, { merge: true }).then(() => {
+      showToast('Шаблон удален', 'success');
+    }).catch(err => {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    });
   };
 
   const handleGenerate = async () => {
@@ -237,7 +358,7 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
       const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": apiKey,
+          "Authorization": apiKey.startsWith('Bearer ') ? apiKey : `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -306,6 +427,14 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
           Pro SEO ТЗ Генератор
         </div>
         <div className="flex gap-3 items-center">
+          <button 
+            onClick={() => setIsTemplatesOpen(true)}
+            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors flex items-center gap-1"
+            title="Шаблоны"
+          >
+            <Bookmark className="w-5 h-5" />
+            <span className="text-sm font-medium hidden sm:inline">Шаблоны</span>
+          </button>
           <button 
             onClick={() => setIsSettingsOpen(true)}
             className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors"
@@ -428,14 +557,21 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
             />
           </div>
 
-          <button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="bg-blue-600 text-white border-none p-3.5 rounded-md font-semibold text-sm cursor-pointer mt-2 flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-            {isGenerating ? 'Генерация...' : 'Сгенерировать Markdown ТЗ'}
-          </button>
+          <div className="flex flex-col gap-1.5 mt-2">
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="w-full bg-blue-600 text-white border-none p-3.5 rounded-md font-semibold text-sm cursor-pointer flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+              {isGenerating ? 'Генерация...' : 'Сгенерировать Markdown ТЗ'}
+            </button>
+            {lastSaved && (
+              <div className="text-[11px] text-slate-400 text-center font-medium mt-1">
+                Последнее авто-сохранение: {lastSaved.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
         </aside>
 
         {/* Right Column - Result */}
@@ -541,6 +677,119 @@ ${cmsFramework.trim() || 'Не указано (уточнить у лида)'}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold text-sm transition-colors"
               >
                 Сохранить и Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Templates Modal */}
+      {isTemplatesOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Bookmark className="w-5 h-5 text-blue-600" /> 
+                Шаблоны ТЗ
+              </h3>
+              <button 
+                onClick={() => setIsTemplatesOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 flex-1 overflow-y-auto">
+              {!userId ? (
+                <div className="text-center py-8 text-slate-500">
+                  <p className="mb-4">Чтобы сохранять и использовать шаблоны, необходимо войти в систему.</p>
+                  <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 transition-colors">
+                    Войти через Google
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Save current template */}
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <h4 className="text-sm font-semibold text-slate-800 mb-3">Сохранить текущие данные как шаблон</h4>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newTemplateName}
+                        onChange={(e) => setNewTemplateName(e.target.value)}
+                        placeholder="Название нового шаблона..."
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-blue-600"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveTemplate();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleSaveTemplate}
+                        className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4" /> 
+                        <span className="hidden sm:inline">Сохранить</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Template List */}
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-800 mb-3">Ваши сохраненные шаблоны</h4>
+                    {templates.length === 0 ? (
+                      <p className="text-sm text-slate-500 py-4 text-center bg-white border border-dashed border-slate-200 rounded-lg">
+                        У вас пока нет сохраненных шаблонов.
+                      </p>
+                    ) : (
+                      <div className="grid gap-3">
+                        {templates.map(t => (
+                          <div 
+                            key={t.id} 
+                            onClick={() => handleLoadTemplate(t)}
+                            className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-colors gap-4"
+                          >
+                            <div className="flex flex-col overflow-hidden">
+                              <span className="font-semibold text-slate-800 truncate">{t.name}</span>
+                              <span className="text-xs text-slate-500 truncate mt-1">
+                                {t.taskSummary || 'Без заголовка'} • {PROBLEM_TYPES.find(p => p.id === t.selectedProblemType)?.name || 'Не выбран'}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLoadTemplate(t);
+                                }}
+                                className="text-sm font-medium text-blue-600 hover:text-blue-800 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded transition-colors"
+                              >
+                                Применить
+                              </button>
+                              <button
+                                onClick={(e) => handleDeleteTemplate(t.id, e)}
+                                title="Удалить шаблон"
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+              <button
+                onClick={() => setIsTemplatesOpen(false)}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-md font-semibold text-sm transition-colors"
+              >
+                Закрыть
               </button>
             </div>
           </div>
