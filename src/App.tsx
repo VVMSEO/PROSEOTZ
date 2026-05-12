@@ -457,6 +457,21 @@ ${exampleUrls.trim() || 'Не указаны'}
       let currentText = "";
       setGeneratedTask(""); // Clear the loading message immediately
       
+      const cleanMarkdownUrls = (text: string) => {
+        return text.replace(/`([^`]+)`/g, (match, content) => {
+          const isUrl = /^https?:\/\//i.test(content) || /^www\./i.test(content);
+          const isPath = /^\/[a-zA-Z0-9\-_./*]+/i.test(content) || ['/', '/*'].includes(content);
+          const isDomainOrFile = /^[a-zA-Z0-9\-_.]+\.[a-zA-Z]{2,10}(\/.*)?$/i.test(content);
+          const isExtension = /^\.[a-zA-Z0-9]+$/i.test(content);
+          const isProtocol = ['http://', 'https://', 'www'].includes(content.toLowerCase());
+          
+          if ((isUrl || isPath || isDomainOrFile || isExtension || isProtocol) && !content.includes('<') && !content.includes('>')) {
+            return content;
+          }
+          return match;
+        });
+      };
+      
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -473,7 +488,7 @@ ${exampleUrls.trim() || 'Не указаны'}
               const content = parsed.choices?.[0]?.delta?.content || "";
               if (content) {
                 currentText += content;
-                setGeneratedTask(currentText);
+                setGeneratedTask(cleanMarkdownUrls(currentText));
               }
             } catch (e) {
               // Ignore parse errors from partial chunks if any
