@@ -442,12 +442,17 @@ ${exampleUrls.trim() || 'Не указаны'}
     };
 
     const doRequest = async (useStream: boolean) => {
+      const headers: Record<string, string> = {
+        "Authorization": apiKey.trim().startsWith('Bearer') ? apiKey.trim() : `Bearer ${apiKey.trim()}`,
+        "Content-Type": "application/json",
+      };
+      if (useStream) {
+        headers["Accept"] = "text/event-stream";
+      }
+
       const response = await fetch("https://routerai.ru/api/v1/chat/completions", {
         method: "POST",
-        headers: {
-          "Authorization": apiKey.trim().startsWith('Bearer') ? apiKey.trim() : `Bearer ${apiKey.trim()}`,
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify({
           model: "anthropic/claude-sonnet-4.6",
           messages: [
@@ -467,7 +472,7 @@ ${exampleUrls.trim() || 'Не указаны'}
         const text = data.choices?.[0]?.message?.content;
         if (text) {
           setGeneratedTask(cleanMarkdownUrls(text));
-          showToast('ТЗ успешно сгенерировано (без стриминга)!', 'success');
+          showToast('ТЗ успешно сгенерировано!', 'success');
         } else {
           throw new Error('Empty response from AI');
         }
@@ -484,12 +489,16 @@ ${exampleUrls.trim() || 'Не указаны'}
       let currentText = "";
       setGeneratedTask(""); // Clear the loading message immediately
       
+      let buffer = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        
+        // Keep the last partial line in the buffer
+        buffer = lines.pop() || "";
         
         for (const line of lines) {
           if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
@@ -517,7 +526,6 @@ ${exampleUrls.trim() || 'Не указаны'}
     } catch (error: any) {
       console.warn('Streaming failed, trying without stream...', error);
       try {
-        setGeneratedTask('Ошибка при стриминге, пробуем обычный запрос...');
         await doRequest(false);
       } catch (err: any) {
         console.error('Generation error:', err);
